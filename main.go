@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	git "gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/yaml.v2"
+	"k8s.io/klog/v2"
 )
 
 type result struct {
@@ -57,7 +57,7 @@ func main() {
 
 	err := run()
 	if err != nil {
-		log.Fatal(err)
+		klog.Fatal(err)
 	}
 }
 
@@ -105,6 +105,7 @@ func runBenchmarks() (Set, error) {
 	set := Set{}
 	for _, benchmark := range benchmarks.Benchmarks {
 		parseSet, err := runBenchmark(benchmarks.Command, &benchmark)
+		klog.InfoS("parse result", "parseSet", parseSet)
 		if err != nil {
 			return nil, err
 		}
@@ -172,7 +173,7 @@ func run() error {
 
 	updateBenchmarks()
 
-	log.Printf("Run Benchmark: %s %s", prev, baseRef)
+	klog.InfoS("Run Benchmark", "prev", prev, "baseRef", baseRef)
 	prevSet, err := runBenchmarks()
 	if err != nil {
 		return fmt.Errorf("failed to run a benchmark: %w", err)
@@ -183,7 +184,7 @@ func run() error {
 		return fmt.Errorf("failed to reset the worktree to HEAD: %w", err)
 	}
 
-	log.Printf("Run Benchmark: %s %s", head.Hash(), "HEAD")
+	klog.InfoS("Run Benchmark", "head.Hash", head.Hash(), "head", "HEAD")
 	headSet, err := runBenchmarks()
 	if err != nil {
 		return fmt.Errorf("failed to run a benchmark: %w", err)
@@ -196,7 +197,9 @@ func run() error {
 		benchName := benchmark.UniqueName
 		headBench, ok := headSet[benchName]
 		if !ok {
-			return fmt.Errorf("missing benchmark '%s'", benchName)
+			klog.ErrorS(fmt.Errorf("missing benchmark '%s'", benchName), "missing benchmark")
+			continue
+			// return fmt.Errorf("missing benchmark '%s'", benchName)
 		}
 
 		rows = append(rows, generateRow("HEAD", headBench))
@@ -247,6 +250,7 @@ func runBenchmark(cmdStr string, benchmark *Benchmark) (parse.Set, error) {
 		"-benchtime", benchmark.Benchtime,
 		"-timeout", benchmark.Timeout,
 		"-cpu", benchmark.Cpu,
+		"-v",
 	}
 	if *benchmark.Benchmem {
 		args = append(args, "-benchmem")
@@ -260,8 +264,8 @@ func runBenchmark(cmdStr string, benchmark *Benchmark) (parse.Set, error) {
 		if strings.HasSuffix(strings.TrimSpace(stderr.String()), "no packages to test") {
 			return parse.Set{}, nil
 		}
-		log.Println(string(out))
-		log.Println(stderr.String())
+		klog.InfoS(string(out))
+		klog.InfoS(stderr.String())
 		return nil, fmt.Errorf("failed to run '%s' command: %w", cmd, err)
 	}
 
@@ -270,6 +274,7 @@ func runBenchmark(cmdStr string, benchmark *Benchmark) (parse.Set, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse a result of benchmarks: %w", err)
 	}
+	klog.InfoS("runBenchmark", "command", cmd)
 	return s, nil
 }
 
