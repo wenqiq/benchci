@@ -1,0 +1,29 @@
+name: Upload release files
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  goRelease:
+    name: UploadRelease
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.17
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.17
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+
+      - name: Install goreleaser
+        run: go install github.com/goreleaser/goreleaser@latest
+
+      - name: Run goreleaser
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: goreleaser release
