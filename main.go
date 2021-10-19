@@ -103,8 +103,8 @@ func updateBenchmarks() {
 
 func runBenchmarks() (Set, error) {
 	set := Set{}
-	for _, benchmark := range benchmarks.Benchmarks {
-		parseSet, err := runBenchmark(benchmarks.Command, &benchmark)
+	for i, benchmark := range benchmarks.Benchmarks {
+		parseSet, err := runBenchmark(benchmarks.Command, &benchmarks.Benchmarks[i])
 		klog.InfoS("Parse result", "parseSet", parseSet)
 		if err != nil {
 			return nil, err
