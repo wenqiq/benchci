@@ -8,7 +8,9 @@ builds:
       - windows
       - darwin
 archives:
-  - replacements:
+  - 
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    replacements:
       386: i386
       amd64: x86_64
 checksum:
