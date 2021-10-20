@@ -98,6 +98,9 @@ adjust_os() {
   case ${OS} in
     386) OS=i386 ;;
     amd64) OS=x86_64 ;;
+    darwin) OS=darwin ;;
+    linux) OS=linux ;;
+    windows) OS=windows ;;
   esac
   true
 }
@@ -106,6 +109,9 @@ adjust_arch() {
   case ${ARCH} in
     386) ARCH=i386 ;;
     amd64) ARCH=x86_64 ;;
+    darwin) ARCH=darwin ;;
+    linux) ARCH=linux ;;
+    windows) ARCH=windows ;;
   esac
   true
 }
@@ -373,7 +379,7 @@ adjust_arch
 
 log_info "found version: ${VERSION} for ${TAG}/${OS}/${ARCH}"
 
-NAME=${PROJECT_NAME}_${VERSION}_${OS}_${ARCH}
+NAME=${PROJECT_NAME}-${OS}-${ARCH}
 TARBALL=${NAME}.${FORMAT}
 TARBALL_URL=${GITHUB_DOWNLOAD}/${TAG}/${TARBALL}
 CHECKSUM=checksums.txt
