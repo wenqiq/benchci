@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"gopkg.in/src-d/go-git.v4/plumbing/object"
 	"io"
 	"io/ioutil"
 	"os"
@@ -30,11 +31,12 @@ type comparedScore struct {
 }
 
 var (
-	flagConfiguration = &BenchmarkConfiguration{}
-	configPath        string
-	benchmarks        = &BenchmarkList{}
-	baseRef           string
-	onlyRegression    bool
+	flagConfiguration    = &BenchmarkConfiguration{}
+	configPath           string
+	benchmarks           = &BenchmarkList{}
+	baseRef              string
+	onlyRegression       bool
+	compareLatestVersion bool
 )
 
 type Set map[string]*parse.Benchmark
@@ -49,14 +51,13 @@ func init() {
 	flag.BoolVar(flagConfiguration.Benchmem, "benchmem", true, "")
 	flag.StringVar(&configPath, "config", "", "")
 	flag.StringVar(&baseRef, "base", "HEAD~1", "")
+	flag.BoolVar(&compareLatestVersion, "compare-release", true, "compare with latest release version")
 	flag.BoolVar(&onlyRegression, "only-regression", false, "")
 }
 
 func main() {
 	flag.Parse()
-
-	err := run()
-	if err != nil {
+	if err := run(compareLatestVersion); err != nil {
 		klog.Fatal(err)
 	}
 }
@@ -128,7 +129,45 @@ func runBenchmarks() (Set, error) {
 	return set, nil
 }
 
-func run() error {
+func getLatestRelease(repository *git.Repository) (string, *object.Commit, error) {
+	tagRefs, err := repository.Tags()
+	if err != nil {
+		return "", nil, err
+	}
+
+	var latestTagCommit *object.Commit
+	var latestTagName string
+	err = tagRefs.ForEach(func(tagRef *plumbing.Reference) error {
+		revision := plumbing.Revision(tagRef.Name().String())
+		tagCommitHash, err := repository.ResolveRevision(revision)
+		if err != nil {
+			return err
+		}
+
+		commit, err := repository.CommitObject(*tagCommitHash)
+		if err != nil {
+			return err
+		}
+
+		if latestTagCommit == nil {
+			latestTagCommit = commit
+			latestTagName = tagRef.Name().String()
+		}
+
+		if commit.Committer.When.After(latestTagCommit.Committer.When) {
+			latestTagCommit = commit
+			latestTagName = tagRef.Name().String()
+		}
+
+		return nil
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	return latestTagName, latestTagCommit, nil
+}
+
+func run(compareLatestReversion bool) error {
 	if err := parseBenchmarks(); err != nil {
 		return err
 	}
@@ -179,6 +218,27 @@ func run() error {
 		return fmt.Errorf("failed to run a benchmark: %w", err)
 	}
 
+	var latestReleaseSet Set
+	var tagName string
+	var lastReleaseCommit *object.Commit
+	if compareLatestReversion {
+		tagName, lastReleaseCommit, err = getLatestRelease(r)
+		if err != nil {
+			return fmt.Errorf("failed to get latest release version: %w", err)
+		}
+		latestReleaseCommitHash := &lastReleaseCommit.Hash
+		err = w.Reset(&git.ResetOptions{Commit: *latestReleaseCommitHash, Mode: git.HardReset})
+		if err != nil {
+			return fmt.Errorf("failed to reset the worktree to a lastest release commit commit: %w", err)
+		}
+
+		klog.InfoS("Run Benchmark", "latestReleaseCommitHash", latestReleaseCommitHash, "tagName", tagName)
+		latestReleaseSet, err = runBenchmarks()
+		if err != nil {
+			return fmt.Errorf("failed to run a benchmark: %w", err)
+		}
+	}
+
 	err = w.Reset(&git.ResetOptions{Commit: head.Hash(), Mode: git.HardReset})
 	if err != nil {
 		return fmt.Errorf("failed to reset the worktree to HEAD: %w", err)
@@ -192,6 +252,7 @@ func run() error {
 
 	var ratios []result
 	var rows [][]string
+	var ratios1 []result
 
 	for _, benchmark := range benchmarks.Benchmarks {
 		benchName := benchmark.UniqueName
@@ -207,6 +268,23 @@ func run() error {
 		if !ok {
 			rows = append(rows, []string{benchName, baseRef, "-", "-"})
 			continue
+		}
+
+		if latestReleaseBench, ok := latestReleaseSet[benchName]; ok {
+			rows = append(rows, generateRow(tagName, latestReleaseBench))
+			var ratioNsPerOp1 float64
+			if latestReleaseBench.NsPerOp != 0 {
+				ratioNsPerOp1 = (headBench.NsPerOp - latestReleaseBench.NsPerOp) / latestReleaseBench.NsPerOp
+			}
+			var ratioAllocedBytesPerOp1 float64
+			if latestReleaseBench.AllocedBytesPerOp != 0 {
+				ratioAllocedBytesPerOp1 = (float64(headBench.AllocedBytesPerOp) - float64(latestReleaseBench.AllocedBytesPerOp)) / float64(latestReleaseBench.AllocedBytesPerOp)
+			}
+			ratios1 = append(ratios, result{
+				Benchmark:              benchmark,
+				RatioNsPerOp:           ratioNsPerOp1,
+				RatioAllocedBytesPerOp: ratioAllocedBytesPerOp1,
+			})
 		}
 
 		rows = append(rows, generateRow(baseRef, prevBench))
@@ -232,9 +310,16 @@ func run() error {
 		showResult(os.Stdout, rows)
 	}
 
-	regression := showRatio(os.Stdout, ratios, onlyRegression)
+	regression := showRatio(os.Stdout, ratios, onlyRegression, baseRef)
 	if regression {
 		return fmt.Errorf("This commit makes benchmarks worse")
+	}
+
+	if compareLatestVersion {
+		regression1 := showRatio(os.Stdout, ratios1, onlyRegression, tagName)
+		if regression1 {
+			return fmt.Errorf("This commit makes benchmarks worse")
+		}
 	}
 
 	return nil
@@ -297,7 +382,7 @@ func showResult(w io.Writer, rows [][]string) {
 	table.Render()
 }
 
-func showRatio(w io.Writer, results []result, onlyRegression bool) bool {
+func showRatio(w io.Writer, results []result, onlyRegression bool, compareWith string) bool {
 	table := tablewriter.NewWriter(w)
 	table.SetAutoFormatHeaders(false)
 	table.SetAlignment(tablewriter.ALIGN_CENTER)
@@ -330,7 +415,7 @@ func showRatio(w io.Writer, results []result, onlyRegression bool) bool {
 		table.Rich(row, colors)
 	}
 	if table.NumLines() > 0 {
-		fmt.Fprintln(w, "\nComparison")
+		fmt.Fprintln(w, fmt.Sprintf("\nComparison with %s", compareWith))
 		fmt.Fprintf(w, "%s\n\n", strings.Repeat("=", 10))
 
 		table.Render()
