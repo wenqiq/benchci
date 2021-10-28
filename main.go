@@ -153,12 +153,11 @@ func getLatestRelease(repository *git.Repository) (string, *object.Commit, error
 			latestTagCommit = commit
 			latestTagName = tagRef.Name().String()
 		}
-
-		if commit.Committer.When.After(latestTagCommit.Committer.When) {
+		// semantic versioning
+		if strings.Compare(latestTagName, tagRef.Name().String()) < 0 {
 			latestTagCommit = commit
 			latestTagName = tagRef.Name().String()
 		}
-
 		return nil
 	})
 	if err != nil {
@@ -416,7 +415,7 @@ func showRatio(w io.Writer, results []result, onlyRegression bool, compareWith s
 		fmt.Fprintln(w)
 	}
 	if regression {
-		klog.ErrorS(fmt.Errorf("this commit makes benchmarks worse, compare with %s", compareWith), "Regression result")
+		klog.ErrorS(nil, "This commit has worse benchmark results", "referenceVersion", compareWith)
 	}
 	return regression
 }
