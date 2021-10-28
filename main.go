@@ -19,6 +19,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+const tagPrefix = "refs/tags/"
+
 type result struct {
 	Benchmark
 	RatioNsPerOp           float64
@@ -102,9 +104,26 @@ func updateBenchmarks() {
 	}
 }
 
-func runBenchmarks() (Set, error) {
+func versionRequired(required, tag string) bool {
+	if required == "" {
+		return true
+	}
+	tagVersion := strings.TrimLeft(tag, tagPrefix)
+	if strings.HasPrefix(required, ">=") {
+		return strings.Compare(tagVersion, strings.TrimLeft(required, ">=")) >= 0
+	}
+	if strings.HasPrefix(required, ">") {
+		return strings.Compare(tagVersion, strings.TrimLeft(required, ">")) > 0
+	}
+	return strings.Compare(tagVersion, required) == 0
+}
+
+func runBenchmarks(ref string) (Set, error) {
 	set := Set{}
 	for i, benchmark := range benchmarks.Benchmarks {
+		if !versionRequired(benchmark.VersionRequirement, ref) {
+			continue
+		}
 		parseSet, err := runBenchmark(benchmarks.Command, &benchmarks.Benchmarks[i])
 		klog.InfoS("Parse result", "parseSet", parseSet)
 		if err != nil {
@@ -207,7 +226,7 @@ func run() error {
 		}
 
 		klog.InfoS("Run Benchmark", "commitHash", commit, "Ref", ref)
-		benchSet, err = runBenchmarks()
+		benchSet, err = runBenchmarks(ref)
 		if err != nil {
 			return nil, fmt.Errorf("failed to run a benchmark: %w", err)
 		}
