@@ -179,7 +179,6 @@ func getLatestRelease(repository *git.Repository) (*plumbing.Reference, error) {
 		if err != nil {
 			klog.ErrorS(err, "Tag name is a not a valid semver, skipping", "tag", tagName)
 		}
-		fmt.Println(tagRef)
 		tags = append(tags, SemverTag{tagRef, v})
 		return nil
 	})
@@ -364,6 +363,7 @@ func runBenchmark(cmdStr string, benchmark *Benchmark) (parse.Set, error) {
 	cmd := exec.Command(cmdStr, args...)
 	cmd.Stderr = &stderr
 
+	klog.InfoS("Running benchmark", "command", cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		if strings.HasSuffix(strings.TrimSpace(stderr.String()), "no packages to test") {
@@ -379,7 +379,6 @@ func runBenchmark(cmdStr string, benchmark *Benchmark) (parse.Set, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse a result of benchmarks: %w", err)
 	}
-	klog.InfoS("Run benchmark", "command", cmd)
 	return s, nil
 }
 
