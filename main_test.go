@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"gopkg.in/src-d/go-git.v4"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"gopkg.in/src-d/go-git.v4"
 )
 
 func TestVersionCompare(t *testing.T) {
@@ -16,47 +16,47 @@ func TestVersionCompare(t *testing.T) {
 	}{
 		{
 			versionRequirement: ">=1.9.0",
-			version:            "refs/tags/1.10.0",
+			version:            "1.10.0",
 			expectResult:       true,
 		},
 		{
 			versionRequirement: ">=1.3.0",
-			version:            "refs/tags/1.3.0",
+			version:            "1.3.0",
 			expectResult:       true,
 		},
 		{
 			versionRequirement: ">=1.3.0",
-			version:            "refs/tags/1.2.0",
+			version:            "1.2.0",
 			expectResult:       false,
 		},
 		{
-			versionRequirement: ">1.3.0",
-			version:            "refs/tags/1.4.0",
+			versionRequirement: ">v1.3.0",
+			version:            "v1.4.0",
 			expectResult:       true,
 		},
 		{
 			versionRequirement: ">1.3.0",
-			version:            "refs/tags/1.3.0",
+			version:            "v1.3.0",
 			expectResult:       false,
 		},
 		{
-			versionRequirement: ">1.3.0",
-			version:            "refs/tags/1.2.0",
-			expectResult:       false,
-		},
-		{
-			versionRequirement: "1.3.0",
-			version:            "refs/tags/1.2.0",
+			versionRequirement: ">v1.3.0",
+			version:            "1.2.0",
 			expectResult:       false,
 		},
 		{
 			versionRequirement: "1.3.0",
-			version:            "refs/tags/1.3.0",
+			version:            "1.2.0",
+			expectResult:       false,
+		},
+		{
+			versionRequirement: "1.3.0",
+			version:            "1.3.0",
 			expectResult:       true,
 		},
 		{
 			versionRequirement: "",
-			version:            "refs/tags/1.3.0",
+			version:            "1.3.0",
 			expectResult:       true,
 		},
 	}

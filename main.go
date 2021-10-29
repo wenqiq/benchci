@@ -16,12 +16,12 @@ import (
 	"golang.org/x/tools/benchmark/parse"
 	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
+	"gopkg.in/src-d/go-git.v4/plumbing/storer"
 	"gopkg.in/yaml.v2"
 	"k8s.io/klog/v2"
 )
 
 const (
-	tagPrefix        = "refs/tags/"
 	tagVersionPrefix = "v"
 )
 
@@ -112,8 +112,7 @@ func versionRequired(required, tag string) bool {
 	if required == "" {
 		return true
 	}
-	tagVersion := strings.TrimLeft(tag, tagPrefix)
-	tagVer, _ := semver.Make(trimTagVersion(tagVersion))
+	tagVer, _ := semver.Make(trimTagVersion(tag))
 
 	if strings.HasPrefix(required, ">=") {
 		requiredVer, _ := semver.Make(trimTagVersion(strings.TrimLeft(required, ">=")))
@@ -162,10 +161,11 @@ func trimTagVersion(tagName string) string {
 	return strings.TrimLeft(tagName, tagVersionPrefix)
 }
 
-func getLatestRelease(repository *git.Repository) (*plumbing.Reference, error) {
-	tagRefs, err := repository.Tags()
+func getLatestRelease(repository *git.Repository) (prevVersionTag *plumbing.Reference, err error) {
+	var tagRefs storer.ReferenceIter
+	tagRefs, err = repository.Tags()
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	type SemverTag struct {
@@ -187,9 +187,9 @@ func getLatestRelease(repository *git.Repository) (*plumbing.Reference, error) {
 		t2 := &tags[j]
 		return t1.Version.GT(t2.Version)
 	})
-	prevVersionTag := tags[0].Ref
+	prevVersionTag = tags[0].Ref
 	klog.InfoS("Latest tag version", "tag", prevVersionTag)
-	return prevVersionTag, nil
+	return
 }
 
 func run() error {
@@ -261,7 +261,7 @@ func run() error {
 			return fmt.Errorf("failed to get latest release version: %w", err)
 		}
 		tagName = prevVersionTag.Name().String()
-		latestReleaseSet, err = resetAndRunBenchmark(prevVersionTag.Hash(), tagName, true)
+		latestReleaseSet, err = resetAndRunBenchmark(prevVersionTag.Hash(), prevVersionTag.Name().Short(), true)
 		if err != nil {
 			klog.ErrorS(err, "Failed to run a benchmark")
 		}
