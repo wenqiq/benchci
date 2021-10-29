@@ -8,18 +8,22 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 
+	"github.com/blang/semver/v4"
 	"github.com/olekukonko/tablewriter"
 	"golang.org/x/tools/benchmark/parse"
 	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
 	"gopkg.in/yaml.v2"
 	"k8s.io/klog/v2"
 )
 
-const tagPrefix = "refs/tags/"
+const (
+	tagPrefix        = "refs/tags/"
+	tagVersionPrefix = "v"
+)
 
 type result struct {
 	Benchmark
@@ -109,19 +113,25 @@ func versionRequired(required, tag string) bool {
 		return true
 	}
 	tagVersion := strings.TrimLeft(tag, tagPrefix)
+	tagVer, _ := semver.Make(trimTagVersion(tagVersion))
+
 	if strings.HasPrefix(required, ">=") {
-		return strings.Compare(tagVersion, strings.TrimLeft(required, ">=")) >= 0
+		requiredVer, _ := semver.Make(trimTagVersion(strings.TrimLeft(required, ">=")))
+		return tagVer.GTE(requiredVer)
 	}
 	if strings.HasPrefix(required, ">") {
-		return strings.Compare(tagVersion, strings.TrimLeft(required, ">")) > 0
+		requiredVer, _ := semver.Make(trimTagVersion(strings.TrimLeft(required, ">")))
+		return tagVer.GT(requiredVer)
 	}
-	return strings.Compare(tagVersion, required) == 0
+	requiredVer, _ := semver.Make(trimTagVersion(required))
+	return tagVer.Equals(requiredVer)
 }
 
-func runBenchmarks(ref string) (Set, error) {
+func runBenchmarks(tagVersion string, isTag bool) (Set, error) {
 	set := Set{}
 	for i, benchmark := range benchmarks.Benchmarks {
-		if !versionRequired(benchmark.VersionRequirement, ref) {
+		if isTag && !versionRequired(benchmark.VersionRequirement, tagVersion) {
+			klog.InfoS("Version required, skip test", "tagVersion", tagVersion, "versionRequirement", benchmark.VersionRequirement)
 			continue
 		}
 		parseSet, err := runBenchmark(benchmarks.Command, &benchmarks.Benchmarks[i])
@@ -148,41 +158,39 @@ func runBenchmarks(ref string) (Set, error) {
 	return set, nil
 }
 
-func getLatestRelease(repository *git.Repository) (string, *object.Commit, error) {
+func trimTagVersion(tagName string) string {
+	return strings.TrimLeft(tagName, tagVersionPrefix)
+}
+
+func getLatestRelease(repository *git.Repository) (*plumbing.Reference, error) {
 	tagRefs, err := repository.Tags()
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
-	var latestTagCommit *object.Commit
-	var latestTagName string
+	type SemverTag struct {
+		Ref     *plumbing.Reference
+		Version semver.Version
+	}
+	tags := make([]SemverTag, 0)
 	err = tagRefs.ForEach(func(tagRef *plumbing.Reference) error {
-		revision := plumbing.Revision(tagRef.Name().String())
-		tagCommitHash, err := repository.ResolveRevision(revision)
+		tagName := tagRef.Name().Short()
+		v, err := semver.Make(trimTagVersion(tagName))
 		if err != nil {
-			return err
+			klog.ErrorS(err, "Tag name is a not a valid semver, skipping", "tag", tagName)
 		}
-
-		commit, err := repository.CommitObject(*tagCommitHash)
-		if err != nil {
-			return err
-		}
-
-		if latestTagCommit == nil {
-			latestTagCommit = commit
-			latestTagName = tagRef.Name().String()
-		}
-		// semantic versioning
-		if strings.Compare(latestTagName, tagRef.Name().String()) < 0 {
-			latestTagCommit = commit
-			latestTagName = tagRef.Name().String()
-		}
+		fmt.Println(tagRef)
+		tags = append(tags, SemverTag{tagRef, v})
 		return nil
 	})
-	if err != nil {
-		return "", nil, err
-	}
-	return latestTagName, latestTagCommit, nil
+	sort.Slice(tags, func(i, j int) bool {
+		t1 := &tags[i]
+		t2 := &tags[j]
+		return t1.Version.GT(t2.Version)
+	})
+	prevVersionTag := tags[0].Ref
+	klog.InfoS("Latest tag version", "tag", prevVersionTag)
+	return prevVersionTag, nil
 }
 
 func run() error {
@@ -219,14 +227,14 @@ func run() error {
 		return fmt.Errorf("the repository is dirty: commit all changes before running")
 	}
 
-	resetAndRunBenchmark := func(commit plumbing.Hash, ref string) (benchSet Set, err error) {
+	resetAndRunBenchmark := func(commit plumbing.Hash, ref string, isTag bool) (benchSet Set, err error) {
 		err = w.Reset(&git.ResetOptions{Commit: commit, Mode: git.HardReset})
 		if err != nil {
-			return nil, fmt.Errorf("failed to reset the worktree to a commit %v: %w", commit, err)
+			return nil, fmt.Errorf("failed to reset the worktree to a commit %v, ref %v: %w", commit, ref, err)
 		}
 
 		klog.InfoS("Run Benchmark", "commitHash", commit, "Ref", ref)
-		benchSet, err = runBenchmarks(ref)
+		benchSet, err = runBenchmarks(ref, isTag)
 		if err != nil {
 			return nil, fmt.Errorf("failed to run a benchmark: %w", err)
 		}
@@ -239,7 +247,7 @@ func run() error {
 	updateBenchmarks()
 
 	// run benchmark of baseRef
-	prevSet, err := resetAndRunBenchmark(*prev, baseRef)
+	prevSet, err := resetAndRunBenchmark(*prev, baseRef, false)
 	if err != nil {
 		return err
 	}
@@ -247,20 +255,21 @@ func run() error {
 	// run benchmark of latestReleaseVersion
 	var latestReleaseSet Set
 	var tagName string
-	var lastReleaseCommit *object.Commit
+	var prevVersionTag *plumbing.Reference
 	if compareLatestVersion {
-		tagName, lastReleaseCommit, err = getLatestRelease(r)
+		prevVersionTag, err = getLatestRelease(r)
 		if err != nil {
 			return fmt.Errorf("failed to get latest release version: %w", err)
 		}
-		latestReleaseSet, err = resetAndRunBenchmark(lastReleaseCommit.Hash, tagName)
+		tagName = prevVersionTag.Name().String()
+		latestReleaseSet, err = resetAndRunBenchmark(prevVersionTag.Hash(), tagName, true)
 		if err != nil {
 			klog.ErrorS(err, "Failed to run a benchmark")
 		}
 	}
 
 	// run benchmark of HEAD
-	headSet, err := resetAndRunBenchmark(head.Hash(), "HEAD")
+	headSet, err := resetAndRunBenchmark(head.Hash(), "HEAD", false)
 	if err != nil {
 		return err
 	}
