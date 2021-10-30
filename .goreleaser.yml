@@ -1,5 +1,3 @@
-# This is an example .goreleaser.yml file with some sensible defaults.
-# Make sure to check the documentation at https://goreleaser.com
 builds:
   - env:
       - CGO_ENABLED=0
@@ -8,8 +6,7 @@ builds:
       - windows
       - darwin
 archives:
-  - 
-    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+  - name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
     replacements:
       386: i386
       amd64: x86_64
