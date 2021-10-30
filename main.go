@@ -112,6 +112,7 @@ func versionRequired(required, tag string) bool {
 	if required == "" {
 		return true
 	}
+	required = strings.TrimSpace(required)
 	tagVer, _ := semver.Make(trimTagVersion(tag))
 
 	if strings.HasPrefix(required, ">=") {
