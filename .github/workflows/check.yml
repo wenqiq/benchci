@@ -2,12 +2,13 @@ name: Go Benchmark Test
 
 on:
   pull_request:
-    types: [merged]
+    types: [closed]
     branches:
       - main
 
 jobs:
   go-benchmark-checks:
+    if: github.event.pull_request.merged == true
     name: GoBenchmark
     runs-on: ubuntu-latest
     steps:
