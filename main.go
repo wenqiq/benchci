@@ -112,6 +112,7 @@ func versionRequired(required, tag string) bool {
 	if required == "" {
 		return true
 	}
+	required = strings.TrimSpace(required)
 	tagVer, _ := semver.Make(trimTagVersion(tag))
 
 	if strings.HasPrefix(required, ">=") {
@@ -126,10 +127,10 @@ func versionRequired(required, tag string) bool {
 	return tagVer.Equals(requiredVer)
 }
 
-func runBenchmarks(tagVersion string, isTag bool) (Set, error) {
+func runBenchmarks(tagVersion string) (Set, error) {
 	set := Set{}
 	for i, benchmark := range benchmarks.Benchmarks {
-		if isTag && !versionRequired(benchmark.VersionRequirement, tagVersion) {
+		if tagVersion != "" && !versionRequired(benchmark.VersionRequirement, tagVersion) {
 			klog.InfoS("Version required, skip test", "tagVersion", tagVersion, "versionRequirement", benchmark.VersionRequirement)
 			continue
 		}
@@ -177,7 +178,7 @@ func getLatestRelease(repository *git.Repository) (prevVersionTag *plumbing.Refe
 		tagName := tagRef.Name().Short()
 		v, err := semver.Make(trimTagVersion(tagName))
 		if err != nil {
-			klog.ErrorS(err, "Tag name is a not a valid semver, skipping", "tag", tagName)
+			klog.InfoS("Tag name is a not a valid semver, skipping", "tag", tagName, "err", err)
 		}
 		tags = append(tags, SemverTag{tagRef, v})
 		return nil
@@ -187,6 +188,9 @@ func getLatestRelease(repository *git.Repository) (prevVersionTag *plumbing.Refe
 		t2 := &tags[j]
 		return t1.Version.GT(t2.Version)
 	})
+	if len(tags) == 0 {
+		return prevVersionTag, fmt.Errorf("tags nof found in repository")
+	}
 	prevVersionTag = tags[0].Ref
 	klog.InfoS("Latest tag version", "tag", prevVersionTag)
 	return
@@ -233,7 +237,11 @@ func run() error {
 		}
 
 		klog.InfoS("Run Benchmark", "commitHash", commit, "Ref", ref)
-		benchSet, err = runBenchmarks(ref, isTag)
+		var tagVersion string
+		if isTag {
+			tagVersion = ref
+		}
+		benchSet, err = runBenchmarks(tagVersion)
 		if err != nil {
 			return nil, fmt.Errorf("failed to run a benchmark: %w", err)
 		}
