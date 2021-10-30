@@ -10,12 +10,12 @@ all: bin
 .PHONY: bin
 bin:
 	@mkdir -p $(BINDIR)
-	GOOS=linux $(GO) build -o $(BINDIR) $(GOFLAGS) -ldflags '$(LDFLAGS)' github.com/antoninbas/benchci/...
+	GOOS=linux $(GO) build -o $(BINDIR) $(GOFLAGS) -ldflags '$(LDFLAGS)' antrea-io/benchci/...
 
 .PHONY: test
 test:
 	@echo "==> Running all tests <=="
-	GOOS=linux $(GO) test ./test
+	GOOS=linux $(GO) test ./... -v
 
 # code linting
 .golangci-bin:
