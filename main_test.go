@@ -34,12 +34,12 @@ func TestVersionCompare(t *testing.T) {
 		},
 		{
 			versionRequirement: ">1.3.0",
-			version:            "v1.3.0",
+			version:            " v1.3.0",
 			expectedResult:     false,
 		},
 		{
 			versionRequirement: ">v1.3.0",
-			version:            "1.2.0",
+			version:            " 1.2.0",
 			expectedResult:     false,
 		},
 		{
