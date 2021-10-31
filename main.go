@@ -192,7 +192,7 @@ func getLatestRelease(repository *git.Repository) (prevVersionTag *plumbing.Refe
 		return prevVersionTag, fmt.Errorf("tags nof found in repository")
 	}
 	prevVersionTag = tags[0].Ref
-	klog.InfoS("Latest tag version", "tag", prevVersionTag)
+	klog.InfoS("Latest tag version", "tag", prevVersionTag, "allTags", tags)
 	return
 }
 
@@ -347,7 +347,8 @@ func run() error {
 		regressionWithLatestVersion = showRatio(os.Stdout, ratiosWithRelease, onlyRegression, tagName)
 	}
 	if regression || regressionWithLatestVersion {
-		return fmt.Errorf("this commit makes benchmarks worse")
+		return fmt.Errorf("this commit makes benchmarks worse，compared with %s: %t, comapred with %s: %t",
+			baseRef, regression, tagName, regressionWithLatestVersion)
 	}
 
 	return nil
@@ -448,9 +449,6 @@ func showRatio(w io.Writer, results []result, onlyRegression bool, compareWith s
 
 		table.Render()
 		fmt.Fprintln(w)
-	}
-	if regression {
-		klog.ErrorS(nil, "This commit has worse benchmark results", "referenceVersion", compareWith)
 	}
 	return regression
 }
