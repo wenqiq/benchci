@@ -112,6 +112,7 @@ func versionRequired(required, tag string) bool {
 	if required == "" {
 		return true
 	}
+	required = strings.TrimSpace(required)
 	tagVer, _ := semver.Make(trimTagVersion(tag))
 
 	if strings.HasPrefix(required, ">=") {
@@ -134,22 +135,22 @@ func runBenchmarks(tagVersion string) (Set, error) {
 			continue
 		}
 		parseSet, err := runBenchmark(benchmarks.Command, &benchmarks.Benchmarks[i])
-		klog.InfoS("Parse result", "parseSet", parseSet)
 		if err != nil {
-			return nil, err
-		}
-		if len(parseSet) == 0 {
+			klog.InfoS("Parse result error", "parseSet", parseSet)
 			continue
 		}
 		if len(parseSet) != 1 {
-			return nil, fmt.Errorf("expected exactly one benchmark result")
+			klog.InfoS("expected exactly one benchmark result", "got", parseSet)
+			continue
 		}
 		if _, ok := set[benchmark.UniqueName]; ok {
-			return nil, fmt.Errorf("more than one benchmark with unique name '%s'", benchmark.UniqueName)
+			klog.InfoS("more than one benchmark with unique name", "Name", benchmark.UniqueName)
+			continue
 		}
-		for _, s := range parseSet {
+		for name, s := range parseSet {
 			if len(s) != 1 {
-				return nil, fmt.Errorf("expected exactly one benchmark result")
+				klog.InfoS("expected exactly one benchmark result", "Name", name, "benchmark.UniqueName", benchmark.UniqueName)
+				continue
 			}
 			set[benchmark.UniqueName] = s[0]
 		}
@@ -191,7 +192,7 @@ func getLatestRelease(repository *git.Repository) (prevVersionTag *plumbing.Refe
 		return prevVersionTag, fmt.Errorf("tags nof found in repository")
 	}
 	prevVersionTag = tags[0].Ref
-	klog.InfoS("Latest tag version", "tag", prevVersionTag)
+	klog.InfoS("Latest tag version", "tag", prevVersionTag, "allTags", tags)
 	return
 }
 
@@ -346,7 +347,8 @@ func run() error {
 		regressionWithLatestVersion = showRatio(os.Stdout, ratiosWithRelease, onlyRegression, tagName)
 	}
 	if regression || regressionWithLatestVersion {
-		return fmt.Errorf("this commit makes benchmarks worse")
+		return fmt.Errorf("this commit makes benchmarks worse，compared with %s: %t, comapred with %s: %t",
+			baseRef, regression, tagName, regressionWithLatestVersion)
 	}
 
 	return nil
@@ -447,9 +449,6 @@ func showRatio(w io.Writer, results []result, onlyRegression bool, compareWith s
 
 		table.Render()
 		fmt.Fprintln(w)
-	}
-	if regression {
-		klog.ErrorS(nil, "This commit has worse benchmark results", "referenceVersion", compareWith)
 	}
 	return regression
 }

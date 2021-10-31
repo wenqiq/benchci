@@ -23,32 +23,32 @@ func TestVersionCompare(t *testing.T) {
 			expectedResult:     true,
 		},
 		{
-			versionRequirement: ">=1.3.0",
+			versionRequirement: "  >=1.3.0",
 			version:            "1.2.0",
 			expectedResult:     false,
 		},
 		{
-			versionRequirement: ">v1.3.0",
+			versionRequirement: ">v1.3.0   ",
 			version:            "v1.4.0",
 			expectedResult:     true,
 		},
 		{
 			versionRequirement: ">1.3.0",
-			version:            "v1.3.0",
+			version:            " v1.3.0",
 			expectedResult:     false,
 		},
 		{
 			versionRequirement: ">v1.3.0",
+			version:            " 1.2.0",
+			expectedResult:     false,
+		},
+		{
+			versionRequirement: "1.3.0 ",
 			version:            "1.2.0",
 			expectedResult:     false,
 		},
 		{
-			versionRequirement: "1.3.0",
-			version:            "1.2.0",
-			expectedResult:     false,
-		},
-		{
-			versionRequirement: "1.3.0",
+			versionRequirement: " 1.3.0",
 			version:            "1.3.0",
 			expectedResult:     true,
 		},
