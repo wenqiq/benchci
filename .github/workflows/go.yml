@@ -67,13 +67,6 @@ jobs:
             ${{ runner.os }}-${{ env.go-cache-name }}-
       - name: Run unit tests
         run: make test
-      - name: Codecov
-        uses: codecov/codecov-action@v1
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          file: .coverage/coverage-unit.txt
-          flags: unit-tests
-          name: codecov-unit-test
 
   bin:
     name: Build benchci binaries
