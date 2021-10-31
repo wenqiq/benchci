@@ -135,22 +135,22 @@ func runBenchmarks(tagVersion string) (Set, error) {
 			continue
 		}
 		parseSet, err := runBenchmark(benchmarks.Command, &benchmarks.Benchmarks[i])
-		klog.InfoS("Parse result", "parseSet", parseSet)
 		if err != nil {
-			return nil, err
-		}
-		if len(parseSet) == 0 {
+			klog.InfoS("Parse result error", "parseSet", parseSet)
 			continue
 		}
 		if len(parseSet) != 1 {
-			return nil, fmt.Errorf("expected exactly one benchmark result")
+			klog.InfoS("expected exactly one benchmark result", "got", parseSet)
+			continue
 		}
 		if _, ok := set[benchmark.UniqueName]; ok {
-			return nil, fmt.Errorf("more than one benchmark with unique name '%s'", benchmark.UniqueName)
+			klog.InfoS("more than one benchmark with unique name", "Name", benchmark.UniqueName)
+			continue
 		}
-		for _, s := range parseSet {
+		for name, s := range parseSet {
 			if len(s) != 1 {
-				return nil, fmt.Errorf("expected exactly one benchmark result")
+				klog.InfoS("expected exactly one benchmark result", "Name", name, "benchmark.UniqueName", benchmark.UniqueName)
+				continue
 			}
 			set[benchmark.UniqueName] = s[0]
 		}
