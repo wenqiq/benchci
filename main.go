@@ -189,7 +189,7 @@ func getLatestRelease(repository *git.Repository) (prevVersionTag *plumbing.Refe
 		return t1.Version.GT(t2.Version)
 	})
 	if len(tags) == 0 {
-		return prevVersionTag, fmt.Errorf("tags nof found in repository")
+		return prevVersionTag, fmt.Errorf("version tags not found in repository")
 	}
 	prevVersionTag = tags[0].Ref
 	klog.InfoS("Latest tag version", "tag", prevVersionTag, "allTags", tags)
@@ -347,7 +347,7 @@ func run() error {
 		regressionWithLatestVersion = showRatio(os.Stdout, ratiosWithRelease, onlyRegression, tagName)
 	}
 	if regression || regressionWithLatestVersion {
-		return fmt.Errorf("this commit makes benchmarks worse，compared with %s: %t, comapred with %s: %t",
+		return fmt.Errorf("this commit makes benchmarks worse，compared with %s: %t, compared with %s: %t",
 			baseRef, regression, tagName, regressionWithLatestVersion)
 	}
 
